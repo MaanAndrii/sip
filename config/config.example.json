@@ -1,0 +1,65 @@
+{
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "username": "admin",
+    "password_hash": "",
+    "secret_key": ""
+  },
+  "sip": {
+    "accounts": [
+      {
+        "id": "acc1",
+        "enabled": false,
+        "display_name": "Intercom line 1",
+        "username": "1001",
+        "auth_user": "",
+        "domain": "pbx.example.com",
+        "password": "changeme",
+        "registrar": "",
+        "proxy": "",
+        "transport": "udp",
+        "reg_interval": 300
+      }
+    ],
+    "codecs": ["PCMU", "PCMA"]
+  },
+  "dial": {
+    "ring_timeout": 15,
+    "targets": [
+      {
+        "priority": 1,
+        "label": "Reception",
+        "number": "2001",
+        "account_id": "acc1",
+        "enabled": true
+      },
+      {
+        "priority": 2,
+        "label": "Manager",
+        "number": "2002",
+        "account_id": "acc1",
+        "enabled": true
+      }
+    ]
+  },
+  "incoming": {
+    "auto_answer": true,
+    "answer_after_rings": 2,
+    "answer_delay_sec": 6,
+    "busy_when_in_call": true
+  },
+  "audio": {
+    "capture_dev": "default",
+    "playback_dev": "default",
+    "tx_gain": 1.0,
+    "rx_gain": 1.0,
+    "ec_tail_ms": 200
+  },
+  "gpio": {
+    "button_pin": 17,
+    "led_pin": 27,
+    "active_low": true,
+    "debounce_ms": 50
+  }
+}

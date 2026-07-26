@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вхід — SIP Intercom</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+  <form class="login-card" method="post" action="{{ url_for('login') }}{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
+    <h1>SIP Intercom</h1>
+    <p class="subtitle">Вхід в панель керування</p>
+    {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+    <label>Логін
+      <input type="text" name="username" autocomplete="username" autofocus required>
+    </label>
+    <label>Пароль
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="btn primary">Увійти</button>
+    <p class="hint">Стандартні дані: admin / admin — змініть пароль після входу.</p>
+  </form>
+</body>
+</html>

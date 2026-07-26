@@ -1,0 +1,14 @@
+# Web interface
+Flask>=3.0,<4.0
+
+# GPIO (button + LED). Installed on the Raspberry Pi; optional in dev.
+# gpiozero is pulled in by the setup script on-device, kept optional here.
+gpiozero>=2.0 ; platform_machine == "armv7l" or platform_machine == "aarch64"
+lgpio>=0.2 ; platform_machine == "armv7l" or platform_machine == "aarch64"
+
+# NOTE:
+#   pjsua2 (the SIP engine) is NOT a pip package. It is built from the
+#   pjproject sources together with its SWIG Python bindings by
+#   setup/install.sh. When pjsua2 is not importable the app falls back to a
+#   mock SIP backend so the web UI and control logic can be developed and
+#   tested off-device.

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.log
+
+# Local/runtime config (never commit real credentials)
+config.json
+dev-config.json
+*.config.json
+!config/config.example.json

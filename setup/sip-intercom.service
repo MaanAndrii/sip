@@ -1,0 +1,28 @@
+[Unit]
+Description=SIP Intercom (multi-account SIP client with one-button dialing)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs the app from the install location using its virtualenv.
+Environment=SIP_INTERCOM_CONFIG=/etc/sip-intercom/config.json
+WorkingDirectory=/opt/sip-intercom
+ExecStart=/opt/sip-intercom/venv/bin/python -m sipintercom.app
+Restart=on-failure
+RestartSec=3
+
+# The service needs GPIO and audio access. Running as a dedicated user in the
+# gpio + audio groups is preferred; root also works out of the box.
+User=root
+# User=sipintercom
+# SupplementaryGroups=gpio audio
+
+# Light hardening (relaxed enough for GPIO + ALSA).
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/etc/sip-intercom
+
+[Install]
+WantedBy=multi-user.target

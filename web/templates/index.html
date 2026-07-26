@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SIP Intercom — Панель</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">SIP Intercom</div>
+    <div class="topbar-right">
+      <span class="badge {{ 'mock' if is_mock else 'live' }}">{{ backend }}</span>
+      <span class="user">{{ username }}</span>
+      <a class="btn ghost" href="{{ url_for('logout') }}">Вийти</a>
+    </div>
+  </header>
+
+  {% if is_mock %}
+  <div class="alert warn banner">
+    Працює <b>mock</b>-бекенд SIP (без аудіо та мережі) — режим розробки.
+    Реальний рушій PJSUA2 недоступний на цій машині.
+  </div>
+  {% endif %}
+
+  <div id="restart-banner" class="alert info banner hidden">
+    Деякі зміни застосуються після перезапуску служби:
+    <code>sudo systemctl restart sip-intercom</code>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Панель</button>
+    <button class="tab" data-tab="accounts">Акаунти</button>
+    <button class="tab" data-tab="targets">Номери</button>
+    <button class="tab" data-tab="incoming">Вхідні</button>
+    <button class="tab" data-tab="audio">Аудіо</button>
+    <button class="tab" data-tab="gpio">Кнопка/GPIO</button>
+    <button class="tab" data-tab="system">Система</button>
+  </nav>
+
+  <main>
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="panel active">
+      <div class="status-card">
+        <div class="status-line">
+          <span class="dot" id="state-dot"></span>
+          <span id="state-text">—</span>
+        </div>
+        <div id="call-info" class="call-info"></div>
+        <div class="controls">
+          <button id="btn-call" class="btn primary big">Виклик</button>
+          <button id="btn-hangup" class="btn danger big">Відбій</button>
+          <button id="btn-press" class="btn ghost" title="Емуляція фізичної кнопки">Кнопка ▚</button>
+        </div>
+      </div>
+
+      <div class="reg-card">
+        <h3>Реєстрація акаунтів</h3>
+        <table class="reg-table">
+          <thead><tr><th>Акаунт</th><th>Стан</th><th>Код</th></tr></thead>
+          <tbody id="reg-body"></tbody>
+        </table>
+      </div>
+
+      {% if is_mock %}
+      <div class="sim-card">
+        <h3>Симуляція (dev)</h3>
+        <div class="controls">
+          <button id="sim-incoming" class="btn ghost">📞 Вхідний виклик</button>
+          <button id="sim-answer" class="btn ghost">Відповіли (remote)</button>
+          <button id="sim-remote-hangup" class="btn ghost">Remote поклав</button>
+        </div>
+        <p class="hint">Кнопки емулюють поведінку віддаленої сторони для перевірки логіки.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <!-- Accounts -->
+    <section id="tab-accounts" class="panel">
+      <div class="panel-head">
+        <h2>SIP-акаунти <span class="muted">(до 3)</span></h2>
+        <button id="add-account" class="btn ghost">+ Додати</button>
+      </div>
+      <div id="accounts-list"></div>
+      <button id="save-accounts" class="btn primary">Зберегти акаунти</button>
+    </section>
+
+    <!-- Targets -->
+    <section id="tab-targets" class="panel">
+      <div class="panel-head">
+        <h2>Цільові номери <span class="muted">(за пріоритетом)</span></h2>
+        <button id="add-target" class="btn ghost">+ Додати</button>
+      </div>
+      <label class="inline">Таймаут дзвінка на номер (сек)
+        <input type="number" id="ring-timeout" min="3" max="120" class="small">
+      </label>
+      <div id="targets-list"></div>
+      <p class="hint">Набір іде згори вниз за пріоритетом. Кожен номер дзвонить із власного акаунта; при відсутності відповіді за таймаут / зайнято / відхилено — перехід до наступного.</p>
+      <button id="save-targets" class="btn primary">Зберегти номери</button>
+    </section>
+
+    <!-- Incoming -->
+    <section id="tab-incoming" class="panel">
+      <h2>Вхідні виклики</h2>
+      <label class="switch-row">
+        <input type="checkbox" id="in-auto"> Автовідповідь на вхідні
+      </label>
+      <label class="inline">Відповідати після (гудків)
+        <input type="number" id="in-rings" min="0" max="10" class="small">
+      </label>
+      <label class="switch-row">
+        <input type="checkbox" id="in-busy"> Відхиляти вхідні (зайнято) під час активного виклику
+      </label>
+      <button id="save-incoming" class="btn primary">Зберегти</button>
+    </section>
+
+    <!-- Audio -->
+    <section id="tab-audio" class="panel">
+      <h2>Аудіо</h2>
+      <p class="hint">I2S HAT конфігурується як пристрій ALSA за замовчуванням у setup-скрипті. Значення нижче — для тонкого налаштування.</p>
+      <label class="inline">Пристрій запису (ALSA)
+        <input type="text" id="au-capture" class="wide">
+      </label>
+      <label class="inline">Пристрій відтворення (ALSA)
+        <input type="text" id="au-playback" class="wide">
+      </label>
+      <label class="inline">Підсилення мікрофона (TX)
+        <input type="number" id="au-tx" step="0.1" min="0" max="2" class="small">
+      </label>
+      <label class="inline">Гучність динаміка (RX)
+        <input type="number" id="au-rx" step="0.1" min="0" max="2" class="small">
+      </label>
+      <label class="inline">Ехоподавлення, хвіст (мс)
+        <input type="number" id="au-ec" min="0" max="500" class="small">
+      </label>
+      <button id="save-audio" class="btn primary">Зберегти</button>
+    </section>
+
+    <!-- GPIO -->
+    <section id="tab-gpio" class="panel">
+      <h2>Кнопка та індикація (GPIO, BCM)</h2>
+      <p class="hint">I2S використовує GPIO 18–21 — не використовуйте їх для кнопки/LED.</p>
+      <label class="inline">Пін кнопки (BCM)
+        <input type="number" id="gp-button" min="0" max="27" class="small">
+      </label>
+      <label class="inline">Пін LED (BCM)
+        <input type="number" id="gp-led" min="0" max="27" class="small">
+      </label>
+      <label class="switch-row">
+        <input type="checkbox" id="gp-active-low"> Кнопка активна на землю (pull-up)
+      </label>
+      <label class="inline">Антидребезг (мс)
+        <input type="number" id="gp-debounce" min="0" max="500" class="small">
+      </label>
+      <button id="save-gpio" class="btn primary">Зберегти</button>
+    </section>
+
+    <!-- System -->
+    <section id="tab-system" class="panel">
+      <h2>Веб-інтерфейс</h2>
+      <label class="inline">Логін
+        <input type="text" id="web-username" class="wide">
+      </label>
+      <label class="inline">Порт
+        <input type="number" id="web-port" min="1" max="65535" class="small">
+      </label>
+      <button id="save-web" class="btn primary">Зберегти</button>
+
+      <h2>Зміна пароля</h2>
+      <label class="inline">Поточний пароль
+        <input type="password" id="pw-current" class="wide">
+      </label>
+      <label class="inline">Новий пароль
+        <input type="password" id="pw-new" class="wide">
+      </label>
+      <button id="save-password" class="btn primary">Змінити пароль</button>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    window.IS_MOCK = {{ 'true' if is_mock else 'false' }};
+  </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
