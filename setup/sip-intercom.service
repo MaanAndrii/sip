@@ -7,6 +7,8 @@ Wants=network-online.target
 Type=simple
 # Runs the app from the install location using its virtualenv.
 Environment=SIP_INTERCOM_CONFIG=/etc/sip-intercom/config.json
+# lgpio is the pin factory that works across Pi 4, Pi 5 (RP1) and Zero 2 W.
+Environment=GPIOZERO_PIN_FACTORY=lgpio
 WorkingDirectory=/opt/sip-intercom
 ExecStart=/opt/sip-intercom/venv/bin/python -m sipintercom.app
 Restart=on-failure

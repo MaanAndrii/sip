@@ -1,12 +1,13 @@
-# SIP Intercom for Raspberry Pi Zero 2 W
+# SIP Intercom for Raspberry Pi
 
 A lightweight, single-button SIP intercom. It registers to up to **three SIP
 accounts** at once, and one physical button dials a **priority list of numbers**
 one after another until someone answers. Incoming calls are **auto-answered**.
 Everything is configured from a small **web interface**.
 
-Built for the **Raspberry Pi Zero 2 W** with an **I2S audio HAT**, but the app
-runs on any machine in a mock mode for development.
+Targets **Raspberry Pi 4 / Pi 5** (primary) and **Pi Zero 2 W** (supported),
+with a **USB sound card** for audio (or an I2S HAT). The app also runs on any
+machine in a mock mode for development.
 
 > Узгоджене технічне завдання (українською): [`docs/TZ.md`](docs/TZ.md)
 
@@ -53,7 +54,8 @@ The installer builds pjproject + PJSUA2 Python bindings, installs the app to
 `/opt/sip-intercom`, creates `/etc/sip-intercom/config.json`, and enables the
 `sip-intercom` systemd service. Then:
 
-1. Configure your **I2S HAT** — see [`setup/README-audio.md`](setup/README-audio.md).
+1. Set up audio (**USB sound card** recommended, or I2S HAT) —
+   see [`setup/README-audio.md`](setup/README-audio.md).
 2. Wire **button/LED** — see [`docs/WIRING.md`](docs/WIRING.md).
 3. Open `http://<pi-ip>:8080`, log in (**admin/admin**), **change the password**,
    add your SIP accounts and target numbers.

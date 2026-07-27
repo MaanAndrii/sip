@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Installer for the SIP intercom on Raspberry Pi OS (Debian bookworm, 64-bit)
-# running on a Raspberry Pi Zero 2 W.
+# Installer for the SIP intercom on Raspberry Pi OS (Debian bookworm, 64-bit).
+# Primary targets: Raspberry Pi 4 and Pi 5. Also supported: Pi Zero 2 W.
 #
 # What it does:
 #   1. Installs OS build + audio dependencies.
@@ -26,6 +26,18 @@ if [[ $EUID -ne 0 ]]; then
   echo "Please run as root (sudo)." >&2
   exit 1
 fi
+
+# Best-effort board detection (informational).
+BOARD="unknown Raspberry Pi"
+if [[ -r /proc/device-tree/model ]]; then
+  BOARD="$(tr -d '\0' < /proc/device-tree/model)"
+fi
+echo "==> Detected board: $BOARD"
+case "$BOARD" in
+  *"Zero 2"*)
+    echo "    Note: on the Zero 2 W the PJSUA2 build takes a while (limited RAM/CPU)."
+    ;;
+esac
 
 echo "==> Installing OS dependencies…"
 apt-get update
@@ -105,5 +117,5 @@ systemctl restart sip-intercom.service
 echo
 echo "==> Done."
 echo "    Web UI:   http://<pi-ip>:8080   (login admin / admin — change it!)"
-echo "    Audio:    configure your I2S HAT per setup/README-audio.md"
+echo "    Audio:    set up your USB sound card / I2S HAT per setup/README-audio.md"
 echo "    Logs:     journalctl -u sip-intercom -f"

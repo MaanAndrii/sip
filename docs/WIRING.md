@@ -1,8 +1,10 @@
 # Wiring — button and status LED
 
 Defaults (BCM numbering): **button = GPIO17**, **LED = GPIO27**. These avoid
-the I2S pins (GPIO 18/19/20/21) used by the audio HAT. Both are configurable in
-the web UI (Кнопка/GPIO tab).
+the I2S pins (GPIO 18/19/20/21), which matters only if you use an I2S audio HAT
+(with a USB sound card the whole header is free). The 40-pin header is identical
+on Pi 4, Pi 5 and Zero 2 W. Both pins are configurable in the web UI
+(Кнопка/GPIO tab).
 
 ## Button
 
