@@ -65,6 +65,14 @@ journalctl -u sip-intercom -f          # logs
 sudo systemctl restart sip-intercom    # apply account/audio/GPIO changes
 ```
 
+### Note on the PJSUA2 build (SWIG)
+
+PJSUA2's Python bindings do **not** compile with SWIG 4.1+, which is what
+Debian bookworm ships (you'd see `SwigPyIteratorClosed_T` / `std::map` iterator
+errors in `pjsua2_wrap.cpp`). `install.sh` handles this automatically: when it
+finds an incompatible SWIG it builds **SWIG 4.0.2** into `/usr/local` and uses
+that for the bindings only. The rest of the system SWIG is left untouched.
+
 ## Develop off-device (mock backend)
 
 No Pi, no pjsua2, no audio required:

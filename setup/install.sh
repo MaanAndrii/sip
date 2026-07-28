@@ -60,31 +60,78 @@ pip install --upgrade pip wheel
 pip install "Flask>=3.0,<4.0" "gpiozero>=2.0" "lgpio>=0.2"
 
 # --------------------------------------------------------------------------- #
+# SWIG: PJSUA2's Python bindings do NOT compile with SWIG 4.1+ (the version on
+# Debian bookworm) — you get "SwigPyIteratorClosed_T" / std::map iterator
+# errors in pjsua2_wrap.cpp. Make sure a 4.0.x swig is used for the binding.
+# --------------------------------------------------------------------------- #
+swig_ver() { "$1" -version 2>/dev/null | sed -n 's/.*SWIG Version \([0-9.]*\).*/\1/p'; }
+
+ensure_swig() {
+  local sys_ver; sys_ver="$(swig_ver swig || true)"
+  echo "==> System SWIG version: ${sys_ver:-none}"
+  case "$sys_ver" in
+    3.*|4.0.*) SWIG_BIN="$(command -v swig)"; echo "    Compatible."; return 0 ;;
+  esac
+  if [[ -x /usr/local/bin/swig ]] && [[ "$(swig_ver /usr/local/bin/swig)" == 4.0.* ]]; then
+    SWIG_BIN=/usr/local/bin/swig
+    echo "    Using previously built $SWIG_BIN ($(swig_ver "$SWIG_BIN"))."
+    return 0
+  fi
+  echo "==> Building SWIG 4.0.2 (system SWIG ${sys_ver:-none} is incompatible with PJSUA2)"
+  apt-get install -y --no-install-recommends autoconf automake libtool bison
+  cd "$BUILD_DIR"
+  if [[ ! -d swig-4.0.2 ]]; then
+    curl -fsSL -o swig-4.0.2.tar.gz \
+      https://github.com/swig/swig/archive/refs/tags/v4.0.2.tar.gz
+    tar xzf swig-4.0.2.tar.gz
+  fi
+  cd swig-4.0.2
+  ./autogen.sh
+  # --without-pcre: PJSUA2 does not use regex renames, so we can skip the PCRE
+  # dependency entirely and keep the build self-contained.
+  ./configure --prefix=/usr/local --without-pcre
+  make -j"$(nproc)"
+  make install
+  hash -r
+  SWIG_BIN=/usr/local/bin/swig
+  echo "    Installed SWIG $(swig_ver "$SWIG_BIN")."
+}
+
+# --------------------------------------------------------------------------- #
 # Build pjproject + PJSUA2 python bindings into the venv
 # --------------------------------------------------------------------------- #
 if python -c "import pjsua2" 2>/dev/null; then
   echo "==> pjsua2 already available in venv, skipping build"
 else
   echo "==> Building pjproject $PJ_VERSION with PJSUA2 python bindings"
+  ensure_swig
   cd "$BUILD_DIR"
   if [[ ! -d "pjproject-$PJ_VERSION" ]]; then
     curl -fsSL -o "pjproject-$PJ_VERSION.tar.gz" \
       "https://github.com/pjsip/pjproject/archive/refs/tags/$PJ_VERSION.tar.gz"
     tar xzf "pjproject-$PJ_VERSION.tar.gz"
   fi
-  cd "pjproject-$PJ_VERSION"
+  cd "$BUILD_DIR/pjproject-$PJ_VERSION"
 
-  # Position-independent code is required for the python extension module.
-  export CFLAGS="-fPIC -O2"
-  ./configure --enable-shared --disable-video --disable-libyuv
-  make dep
-  make
-  make install
-  ldconfig
+  # Build the core libraries unless they are already installed (re-run).
+  if ! ls /usr/local/lib/libpjsua2.so* >/dev/null 2>&1; then
+    # Position-independent code is required for the python extension module.
+    export CFLAGS="-fPIC -O2"
+    ./configure --enable-shared --disable-video --disable-libyuv
+    make dep
+    make
+    make install
+    ldconfig
+  else
+    echo "==> pjproject core libraries already installed, skipping core build"
+  fi
 
-  # Build + install the SWIG python bindings into the active venv.
-  cd pjsip-apps/src/swig/python
-  make
+  # Build + install the SWIG python bindings into the active venv, forcing the
+  # compatible swig and regenerating any stale wrapper from a failed run.
+  cd "$BUILD_DIR/pjproject-$PJ_VERSION/pjsip-apps/src/swig/python"
+  make clean >/dev/null 2>&1 || true
+  rm -f pjsua2_wrap.cpp pjsua2.py
+  make SWIG="$SWIG_BIN"
   # setup.py places pjsua2 into the venv's site-packages (python is the venv).
   python setup.py install
 
