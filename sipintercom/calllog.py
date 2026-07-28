@@ -42,9 +42,16 @@ def _classify(answered: bool, code: int) -> str:
 
 
 class CallLog:
-    def __init__(self, bus: EventBus, path: str | None, max_entries: int = MAX_ENTRIES):
+    def __init__(
+        self,
+        bus: EventBus,
+        path: str | None,
+        recordings_dir: str | None = None,
+        max_entries: int = MAX_ENTRIES,
+    ):
         self.bus = bus
         self.path = path
+        self.recordings_dir = recordings_dir
         self.max = max_entries
         self._lock = threading.RLock()
         self._entries: deque[dict] = deque(maxlen=max_entries)  # oldest..newest
@@ -86,6 +93,8 @@ class CallLog:
             self._on_call(ev)
         elif etype == "incoming_busy":
             self._log_busy(ev)
+        elif etype == "recording":
+            self._attach_recording(ev.get("call_id"), ev.get("file"))
 
     def _base(self, ev: dict) -> dict:
         return {
@@ -101,6 +110,7 @@ class CallLog:
             "result": None,  # None == in progress
             "code": ev.get("code", 0),
             "reason": ev.get("reason", ""),
+            "recording": None,  # filename in recordings_dir, when available
         }
 
     def _ensure(self, ev: dict) -> dict:
@@ -152,6 +162,33 @@ class CallLog:
             entry["duration"] = max(0, int(entry["ended_at"] - entry["answered_at"]))
         entry["result"] = _classify(entry["answered"], code)
 
+    def _attach_recording(self, call_id: str | None, fname: str | None) -> None:
+        if not call_id or not fname:
+            return
+        with self._lock:
+            for entry in self._entries:
+                if entry.get("id") == call_id:
+                    entry["recording"] = fname
+                    break
+            self._save()
+            self._prune_recordings()
+        self.bus.publish({"type": "calllog"})
+
+    def _prune_recordings(self) -> None:
+        """Delete recording files no longer referenced by the (last 50) journal."""
+        if not self.recordings_dir or not os.path.isdir(self.recordings_dir):
+            return
+        keep = {e.get("recording") for e in self._entries if e.get("recording")}
+        try:
+            for fn in os.listdir(self.recordings_dir):
+                if fn not in keep:
+                    try:
+                        os.remove(os.path.join(self.recordings_dir, fn))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
     # -- access ------------------------------------------------------------- #
     def entries(self) -> list[dict]:
         """Newest first."""
@@ -163,4 +200,5 @@ class CallLog:
             self._entries.clear()
             self._active.clear()
             self._save()
+            self._prune_recordings()  # nothing referenced -> removes all files
         self.bus.publish({"type": "calllog"})

@@ -43,7 +43,8 @@ echo "==> Installing OS dependencies…"
 apt-get update
 apt-get install -y --no-install-recommends \
   build-essential git pkg-config swig python3 python3-dev python3-venv \
-  libasound2-dev libssl-dev libopus-dev alsa-utils curl ca-certificates
+  libasound2-dev libssl-dev libopus-dev alsa-utils curl ca-certificates \
+  ffmpeg
 
 echo "==> Creating app directory $APP_DIR"
 mkdir -p "$APP_DIR" "$CFG_DIR" "$BUILD_DIR"

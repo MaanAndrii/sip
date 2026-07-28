@@ -140,6 +140,8 @@ h3 { font-size: 16px; margin: 18px 0 10px; }
 .res.busy, .res.rejected, .res.failed { background: rgba(218,54,51,.16); color: #ff9d99; }
 .res.no-answer, .res.canceled, .res.interrupted { background: rgba(210,153,34,.16); color: #ffd479; }
 .res.active { background: rgba(47,129,247,.16); color: #9ac4ff; }
+.rec-link { color: var(--accent); text-decoration: none; font-size: 16px; }
+.rec-link:hover { color: #9ac4ff; }
 
 /* ---- Alerts / banners ---- */
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 14px; }

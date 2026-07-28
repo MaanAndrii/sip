@@ -23,10 +23,12 @@ from __future__ import annotations
 
 import itertools
 import logging
+import os
 import threading
 import time
 from typing import Optional
 
+from . import media
 from .config import Config
 from .events import EventBus
 
@@ -66,6 +68,9 @@ class BaseEngine:
         # Set by app startup when start() raises, so the web UI can show why
         # the SIP engine is not running instead of the whole process dying.
         self.start_error: Optional[str] = None
+        # Directories for media, injected by the app after construction.
+        self.prompts_dir: Optional[str] = None
+        self.recordings_dir: Optional[str] = None
 
     # -- lifecycle (override) ---------------------------------------------- #
     def start(self) -> None:
@@ -140,6 +145,24 @@ class BaseEngine:
             if a.get("id") == account_id:
                 return a
         return None
+
+    # -- media helpers ----------------------------------------------------- #
+    def _greeting_wav(self) -> Optional[str]:
+        if not self.prompts_dir:
+            return None
+        return os.path.join(self.prompts_dir, "greeting.wav")
+
+    def _greeting_enabled(self) -> bool:
+        if not self.config.get("media", "greeting_enabled", default=False):
+            return False
+        wav = self._greeting_wav()
+        return bool(wav and os.path.exists(wav))
+
+    def _recording_enabled(self) -> bool:
+        return bool(
+            self.config.get("media", "recording_enabled", default=False)
+            and self.recordings_dir
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -228,6 +251,10 @@ class MockEngine(BaseEngine):
             if not call:
                 return
             info = dict(call)
+        # Simulate a recording for the connected part of the call so the web UI
+        # can be exercised without real audio.
+        if info.get("answered_at") and self._recording_enabled():
+            self._mock_record(call_id, info["answered_at"])
         self._publish_call(
             call_id=call_id,
             state=ST_DISCONNECTED,
@@ -236,6 +263,18 @@ class MockEngine(BaseEngine):
             **_pick(info),
         )
 
+    def _mock_record(self, call_id: str, answered_at: float) -> None:
+        dur = min(max(1.0, time.time() - answered_at), 30.0)
+        name = f"{call_id}-{int(time.time())}.wav"
+        try:
+            os.makedirs(self.recordings_dir, exist_ok=True)
+            media.write_silence_wav(
+                os.path.join(self.recordings_dir, name), seconds=dur
+            )
+            self.bus.publish({"type": "recording", "call_id": call_id, "file": name})
+        except Exception:
+            log.exception("mock recording failed")
+
     # -- dev/test helpers (exposed via the web "simulate" endpoints) ------- #
     def sim_answer(self, call_id: str) -> bool:
         with self._lock:
@@ -243,6 +282,7 @@ class MockEngine(BaseEngine):
             if not call or call["state"] not in (ST_CALLING, ST_EARLY):
                 return False
             call["state"] = ST_CONFIRMED
+            call["answered_at"] = time.time()
             info = dict(call)
         self._publish_call(
             call_id=call_id, state=ST_CONFIRMED, code=200, reason="OK", **_pick(info)
@@ -293,6 +333,7 @@ class MockEngine(BaseEngine):
             if not call or call["state"] != ST_EARLY:
                 return
             call["state"] = ST_CONFIRMED
+            call["answered_at"] = time.time()
             info = dict(call)
         self._publish_call(
             call_id=call_id, state=ST_CONFIRMED, code=200, reason="OK", **_pick(info)
@@ -524,6 +565,88 @@ class PjsuaEngine(BaseEngine):
         with self._lock:
             self._pj_calls[call_id] = call
 
+    # -- media: greeting + recording (called from Call callbacks) ---------- #
+    def _bridge_live(self, call, am) -> None:
+        adm = self._ep.audDevManager()
+        try:
+            adm.getCaptureDevMedia().startTransmit(am)
+            am.startTransmit(adm.getPlaybackDevMedia())
+        except Exception:
+            log.exception("failed to bridge live audio")
+
+    def _begin_greeting(self, call, am) -> None:
+        """Play the greeting WAV to the caller, then bridge live audio."""
+        pj = self._pj
+        wav = self._greeting_wav()
+        try:
+            player = pj.AudioMediaPlayer()
+            player.createPlayer(wav, pj.PJMEDIA_FILE_NO_LOOP)
+            player.startTransmit(am)  # caller hears the greeting
+            call._greeting_player = player  # keep a reference alive
+        except Exception:
+            log.exception("failed to start greeting; bridging live audio")
+            self._bridge_live(call, am)
+            self._begin_recording(call, am)
+            return
+
+        duration = float(self.config.get("media", "greeting_duration", default=0)) \
+            or media.wav_duration(wav)
+
+        def _after_greeting() -> None:
+            self._ensure_thread()
+            try:
+                call._greeting_player.stopTransmit(am)
+            except Exception:
+                pass
+            self._bridge_live(call, am)
+            call._bridged = True
+            self._begin_recording(call, am)
+
+        threading.Timer(max(0.5, duration) + 0.3, _after_greeting).start()
+
+    def _begin_recording(self, call, am) -> None:
+        if not self._recording_enabled() or getattr(call, "_recorder", None):
+            return
+        pj = self._pj
+        try:
+            os.makedirs(self.recordings_dir, exist_ok=True)
+            name = f"{call._call_id}-{int(time.time())}.wav"
+            wavpath = os.path.join(self.recordings_dir, name)
+            recorder = pj.AudioMediaRecorder()
+            recorder.createRecorder(wavpath)
+            # Mix both directions: the remote party (am) and our microphone.
+            am.startTransmit(recorder)
+            self._ep.audDevManager().getCaptureDevMedia().startTransmit(recorder)
+            call._recorder = recorder
+            call._recording_wav = wavpath
+            call._recording_name = name
+        except Exception:
+            log.exception("failed to start recording")
+
+    def _finalize_recording(self, call) -> None:
+        wavpath = getattr(call, "_recording_wav", None)
+        name = getattr(call, "_recording_name", None)
+        cid = getattr(call, "_call_id", None)
+        # Dropping the recorder reference stops it and flushes the WAV file.
+        call._recorder = None
+        if not wavpath or not name:
+            return
+
+        def _job() -> None:
+            time.sleep(0.6)  # let the file flush
+            final = name
+            try:
+                if media.ffmpeg_available():
+                    mp3name = name[:-4] + ".mp3"
+                    media.to_mp3(wavpath, os.path.join(self.recordings_dir, mp3name))
+                    os.remove(wavpath)
+                    final = mp3name
+            except Exception:
+                log.exception("recording transcode failed; keeping WAV")
+            self.bus.publish({"type": "recording", "call_id": cid, "file": final})
+
+        threading.Thread(target=_job, name="rec-finalize", daemon=True).start()
+
 
 # The pjsua2 subclasses are defined lazily so importing this module never
 # requires pjsua2. They are created on first use inside PjsuaEngine via the
@@ -580,6 +703,8 @@ try:  # pragma: no cover - only exercised on-device
                 return
 
             engine._register_incoming(call_id, call)
+            # Incoming calls may get a greeting played before live audio.
+            call._play_greeting = engine._greeting_enabled()
             engine._publish_call(
                 call_id=call_id,
                 account_id=self._account_id,
@@ -659,6 +784,7 @@ try:  # pragma: no cover - only exercised on-device
                 remote=remote,
             )
             if mapped == ST_DISCONNECTED:
+                engine._finalize_recording(self)
                 engine._forget_call(self._call_id)
 
         def onCallMediaState(self, prm):
@@ -668,18 +794,26 @@ try:  # pragma: no cover - only exercised on-device
                 info = self.getInfo()
             except Exception:
                 return
-            adm = engine._ep.audDevManager()
-            for i, media in enumerate(info.media):
+            for i, minfo in enumerate(info.media):
                 if (
-                    media.type == pj.PJMEDIA_TYPE_AUDIO
-                    and media.status == pj.PJSUA_CALL_MEDIA_ACTIVE
+                    minfo.type == pj.PJMEDIA_TYPE_AUDIO
+                    and minfo.status == pj.PJSUA_CALL_MEDIA_ACTIVE
                 ):
                     try:
                         am = self.getAudioMedia(i)
-                        adm.getCaptureDevMedia().startTransmit(am)
-                        am.startTransmit(adm.getPlaybackDevMedia())
                     except Exception:
-                        log.exception("failed to connect call audio")
+                        log.exception("failed to get call audio media")
+                        continue
+                    if getattr(self, "_play_greeting", False) and not getattr(
+                        self, "_greeting_done", False
+                    ):
+                        # Answer + play greeting + then bridge live audio.
+                        self._greeting_done = True
+                        engine._begin_greeting(self, am)
+                    elif not getattr(self, "_bridged", False):
+                        self._bridged = True
+                        engine._bridge_live(self, am)
+                        engine._begin_recording(self, am)
 
 except Exception:  # pjsua2 not present — real backend simply won't be selected
     _PjAccount = None  # type: ignore

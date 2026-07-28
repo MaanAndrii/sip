@@ -69,6 +69,16 @@ DEFAULTS: dict[str, Any] = {
         # call is active.
         "busy_when_in_call": True,
     },
+    "media": {
+        # Greeting played to an incoming caller after auto-answer, before the
+        # live intercom audio is bridged in ("answer + play + bridge").
+        "greeting_enabled": False,
+        "greeting_name": "",       # original file name, for display
+        "greeting_duration": 0.0,  # seconds, measured on upload
+        "greeting_gain": 1.0,
+        # Automatic recording of the connected part of each call (default off).
+        "recording_enabled": False,
+    },
     "audio": {
         # ALSA device names. "default" follows /etc/asound.conf (the I2S HAT is
         # configured as the default card by the setup docs).

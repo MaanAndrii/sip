@@ -9,6 +9,10 @@ Type=simple
 Environment=SIP_INTERCOM_CONFIG=/etc/sip-intercom/config.json
 # lgpio is the pin factory that works across Pi 4, Pi 5 (RP1) and Zero 2 W.
 Environment=GPIOZERO_PIN_FACTORY=lgpio
+# Data directory for recordings and the greeting prompt. StateDirectory creates
+# /var/lib/sip-intercom with the right ownership.
+Environment=SIP_INTERCOM_DATA=/var/lib/sip-intercom
+StateDirectory=sip-intercom
 WorkingDirectory=/opt/sip-intercom
 ExecStart=/opt/sip-intercom/venv/bin/python -m sipintercom.app
 Restart=on-failure

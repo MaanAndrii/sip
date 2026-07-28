@@ -12,8 +12,9 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import queue
-from typing import Optional
+import tempfile
 
 from flask import (
     Flask,
@@ -22,10 +23,13 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
+from werkzeug.utils import secure_filename
 
+from . import media
 from .call_controller import CallController
 from .calllog import CallLog
 from .config import Config, verify_password
@@ -45,6 +49,8 @@ def create_app(
     controller: CallController,
     engine: BaseEngine,
     calllog: CallLog,
+    prompts_dir: str = "",
+    recordings_dir: str = "",
 ) -> Flask:
     app = Flask(
         __name__,
@@ -52,6 +58,8 @@ def create_app(
         static_folder="../web/static",
     )
     app.secret_key = config.get("web", "secret_key")
+    # Cap uploads (greeting prompt) at 10 MB.
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
     # ------------------------------------------------------------------ #
     # Auth
@@ -122,6 +130,76 @@ def create_app(
     @login_required
     def api_calls_clear():
         calllog.clear()
+        return jsonify({"ok": True})
+
+    @app.route("/api/recordings/<path:name>")
+    @login_required
+    def api_recording(name):
+        safe = secure_filename(name)
+        if not recordings_dir or not safe:
+            return jsonify({"error": "not found"}), 404
+        return send_from_directory(recordings_dir, safe, as_attachment=False)
+
+    # ------------------------------------------------------------------ #
+    # Media: greeting prompt + recording settings
+    # ------------------------------------------------------------------ #
+    @app.route("/api/media", methods=["POST"])
+    @login_required
+    def api_media():
+        body = request.get_json(force=True) or {}
+        patch = {}
+        for key in ("greeting_enabled", "recording_enabled"):
+            if key in body:
+                patch[key] = bool(body[key])
+        if "greeting_gain" in body:
+            patch["greeting_gain"] = float(body["greeting_gain"])
+        config.update_section("media", patch)
+        # Media settings are read live by the engine — no restart needed.
+        return jsonify({"ok": True})
+
+    @app.route("/api/media/greeting", methods=["POST"])
+    @login_required
+    def api_media_greeting_upload():
+        if not prompts_dir:
+            return jsonify({"error": "сховище недоступне"}), 500
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return jsonify({"error": "файл не надано"}), 400
+        os.makedirs(prompts_dir, exist_ok=True)
+        suffix = os.path.splitext(file.filename)[1] or ".bin"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=prompts_dir)
+        try:
+            file.save(tmp.name)
+            tmp.close()
+            dst = os.path.join(prompts_dir, "greeting.wav")
+            media.to_wav_8k_mono(tmp.name, dst)
+            duration = media.wav_duration(dst)
+        except Exception as exc:
+            log.exception("greeting transcode failed")
+            return jsonify({"error": f"не вдалося обробити файл: {exc}"}), 400
+        finally:
+            try:
+                os.remove(tmp.name)
+            except OSError:
+                pass
+        config.update_section("media", {
+            "greeting_name": secure_filename(file.filename),
+            "greeting_duration": round(duration, 2),
+            "greeting_enabled": True,
+        })
+        return jsonify({"ok": True, "duration": round(duration, 2)})
+
+    @app.route("/api/media/greeting/delete", methods=["POST"])
+    @login_required
+    def api_media_greeting_delete():
+        if prompts_dir:
+            try:
+                os.remove(os.path.join(prompts_dir, "greeting.wav"))
+            except OSError:
+                pass
+        config.update_section("media", {
+            "greeting_name": "", "greeting_duration": 0.0, "greeting_enabled": False,
+        })
         return jsonify({"ok": True})
 
     # ------------------------------------------------------------------ #

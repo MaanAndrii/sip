@@ -340,13 +340,17 @@ function renderCalls(list) {
     const resCls = resKey.replace(/ /g, "-");
     // Show the SIP reason/code on failures to aid diagnosis.
     const title = c.code ? `${c.code} ${c.reason || ""}`.trim() : (c.reason || "");
+    const rec = c.recording
+      ? `<a class="rec-link" href="/api/recordings/${encodeURIComponent(c.recording)}" target="_blank" title="Відтворити / завантажити">▶</a>`
+      : "";
     tr.innerHTML = `
       <td class="num">${esc(fmtTime(c.started_at))}</td>
       <td class="${dirCls}">${dir}</td>
       <td>${esc(shortNum(c.remote))}</td>
       <td>${esc(c.account_id || "")}</td>
       <td><span class="res ${resCls}" title="${esc(title)}">${esc(RESULT_LABELS[resKey] || resKey)}</span></td>
-      <td class="num">${esc(fmtDur(c.duration))}</td>`;
+      <td class="num">${esc(fmtDur(c.duration))}</td>
+      <td>${rec}</td>`;
     body.appendChild(tr);
   });
 }
@@ -360,6 +364,44 @@ $("#clear-calls").addEventListener("click", async () => {
   await apiPost("/api/calls/clear");
   loadCalls();
 });
+
+// --------------------------------------------------------------------------- //
+// Media: greeting + recording
+// --------------------------------------------------------------------------- //
+function renderMedia(m) {
+  m = m || {};
+  $("#greeting-enabled").checked = !!m.greeting_enabled;
+  $("#recording-enabled").checked = !!m.recording_enabled;
+  const cur = $("#greeting-current");
+  if (m.greeting_name) {
+    cur.textContent = `Поточний файл: ${m.greeting_name} (${m.greeting_duration || 0} с)`;
+  } else {
+    cur.textContent = "Файл не завантажено.";
+  }
+}
+
+$("#greeting-upload").addEventListener("click", async () => {
+  const f = $("#greeting-file").files[0];
+  if (!f) { toast("Оберіть файл", "err"); return; }
+  const fd = new FormData();
+  fd.append("file", f);
+  toast("Завантаження…", "ok");
+  const r = await fetch("/api/media/greeting", { method: "POST", body: fd });
+  const data = await r.json().catch(() => ({}));
+  if (r.ok) { toast("Привітання завантажено", "ok"); $("#greeting-file").value = ""; init(); }
+  else toast(data.error || "Помилка завантаження", "err");
+});
+
+$("#greeting-delete").addEventListener("click", async () => {
+  await apiPost("/api/media/greeting/delete");
+  toast("Привітання видалено", "ok");
+  init();
+});
+
+$("#save-media").addEventListener("click", () => saveSection("/api/media", {
+  greeting_enabled: $("#greeting-enabled").checked,
+  recording_enabled: $("#recording-enabled").checked,
+}, "Налаштування медіа збережено"));
 
 // --------------------------------------------------------------------------- //
 // Live status
@@ -441,6 +483,8 @@ async function init() {
   $("#in-auto").checked = cfg.incoming.auto_answer;
   $("#in-rings").value = cfg.incoming.answer_after_rings;
   $("#in-busy").checked = cfg.incoming.busy_when_in_call;
+
+  renderMedia(cfg.media);
 
   $("#au-capture").value = cfg.audio.capture_dev;
   $("#au-playback").value = cfg.audio.playback_dev;

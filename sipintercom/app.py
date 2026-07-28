@@ -59,10 +59,22 @@ def main(argv: list[str] | None = None) -> int:
     bus = EventBus()
 
     engine = create_engine(config, bus, force_mock=args.mock)
+
+    # Data directory (recordings, greeting prompt). systemd sets
+    # SIP_INTERCOM_DATA=/var/lib/sip-intercom; in dev it sits next to the config.
+    cfg_dir = os.path.dirname(os.path.abspath(args.config))
+    data_dir = os.environ.get("SIP_INTERCOM_DATA", os.path.join(cfg_dir, "data"))
+    prompts_dir = os.path.join(data_dir, "prompts")
+    recordings_dir = os.path.join(data_dir, "recordings")
+    os.makedirs(prompts_dir, exist_ok=True)
+    os.makedirs(recordings_dir, exist_ok=True)
+    engine.prompts_dir = prompts_dir
+    engine.recordings_dir = recordings_dir
+
     controller = CallController(config, bus, engine)
-    # Call history lives next to the config file.
-    calllog_path = os.path.join(os.path.dirname(os.path.abspath(args.config)), "call_log.json")
-    calllog = CallLog(bus, calllog_path)
+    # Call history lives next to the config file; recordings in the data dir.
+    calllog_path = os.path.join(cfg_dir, "call_log.json")
+    calllog = CallLog(bus, calllog_path, recordings_dir=recordings_dir)
     button = ButtonInterface(config, bus, controller)
 
     log.info("SIP engine backend: %s", engine.backend_name)
@@ -77,7 +89,10 @@ def main(argv: list[str] | None = None) -> int:
 
     button.start()
 
-    app = create_app(config, bus, controller, engine, calllog)
+    app = create_app(
+        config, bus, controller, engine, calllog,
+        prompts_dir=prompts_dir, recordings_dir=recordings_dir,
+    )
     host = config.get("web", "host", default="0.0.0.0")
     port = int(config.get("web", "port", default=8080))
 

@@ -43,6 +43,7 @@
     <button class="tab" data-tab="targets">Номери</button>
     <button class="tab" data-tab="incoming">Вхідні</button>
     <button class="tab" data-tab="calls">Журнал</button>
+    <button class="tab" data-tab="media">Медіа</button>
     <button class="tab" data-tab="audio">Аудіо</button>
     <button class="tab" data-tab="gpio">Кнопка/GPIO</button>
     <button class="tab" data-tab="system">Система</button>
@@ -132,11 +133,37 @@
       </div>
       <table class="calls-table">
         <thead>
-          <tr><th>Час</th><th>Напрям</th><th>Номер</th><th>Акаунт</th><th>Результат</th><th>Тривалість</th></tr>
+          <tr><th>Час</th><th>Напрям</th><th>Номер</th><th>Акаунт</th><th>Результат</th><th>Тривалість</th><th>Запис</th></tr>
         </thead>
         <tbody id="calls-body"></tbody>
       </table>
       <p id="calls-empty" class="hint hidden">Журнал порожній.</p>
+    </section>
+
+    <!-- Media: greeting + recording -->
+    <section id="tab-media" class="panel">
+      <h2>Привітання для вхідних</h2>
+      <p class="hint">MP3-файл, який чує абонент після автопідняття, перед з'єднанням із живим звуком інтеркому. Файл конвертується у формат дзвінка автоматично.</p>
+      <div class="card">
+        <div id="greeting-current" class="muted" style="margin-bottom:10px;"></div>
+        <label class="inline">Файл (MP3/WAV)
+          <input type="file" id="greeting-file" accept=".mp3,.wav,audio/*">
+        </label>
+        <div class="controls">
+          <button id="greeting-upload" class="btn primary">Завантажити</button>
+          <button id="greeting-delete" class="btn ghost">Видалити</button>
+        </div>
+      </div>
+      <label class="switch-row">
+        <input type="checkbox" id="greeting-enabled"> Програвати привітання вхідним
+      </label>
+
+      <h2>Запис розмов</h2>
+      <p class="hint">Записується лише з'єднана частина розмови (MP3). Зберігаються записи для останніх 50 дзвінків; «Очистити» в журналі видаляє і записи. Дотримуйтесь вимог законодавства щодо згоди на запис.</p>
+      <label class="switch-row">
+        <input type="checkbox" id="recording-enabled"> Автоматично записувати розмови
+      </label>
+      <button id="save-media" class="btn primary">Зберегти налаштування медіа</button>
     </section>
 
     <!-- Audio -->

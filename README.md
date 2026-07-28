@@ -22,7 +22,11 @@ machine in a mock mode for development.
 - Web UI with login (default **admin/admin**), live status via SSE, and full
   configuration (accounts, numbers, incoming, audio, GPIO, password).
 - **Call log** of the last 50 in/out calls (result + duration), persisted to
-  disk.
+  disk, with **recording** playback/download per call.
+- **Greeting prompt** (uploaded MP3) played to an incoming caller after
+  auto-answer, before the live audio is bridged in.
+- **Automatic call recording** (MP3) of the connected part of calls, opt-in,
+  kept for the last 50 calls in `/var/lib/sip-intercom`.
 - **Automatic service restart** on saving settings that need it (accounts,
   codecs, audio, GPIO, web port); dial/incoming settings apply live.
 - Runs as a `systemd` service.
