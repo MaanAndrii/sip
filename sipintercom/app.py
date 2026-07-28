@@ -68,9 +68,12 @@ def main(argv: list[str] | None = None) -> int:
     log.info("SIP engine backend: %s", engine.backend_name)
     try:
         engine.start()
-    except Exception:
-        log.exception("Failed to start SIP engine")
-        return 1
+    except Exception as exc:
+        # A SIP engine failure (e.g. port 5060 busy, no audio device) must NOT
+        # take the web UI down — otherwise the user can't reach the config to
+        # fix it. Log it, remember it, and keep serving.
+        log.exception("SIP engine failed to start; continuing with web UI only")
+        engine.start_error = str(exc)
 
     button.start()
 

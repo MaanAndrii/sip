@@ -456,6 +456,10 @@ async function init() {
   if (status) {
     renderState(status.state, status.call);
     renderRegistrations(status.registrations);
+    if (status.engine_error) {
+      $("#engine-error").textContent = status.engine_error;
+      $("#engine-banner").classList.remove("hidden");
+    }
   }
   await loadCalls();
   connectEvents();

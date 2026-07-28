@@ -261,6 +261,7 @@ class CallController:
                 "state": self.state,
                 "call": dict(self.active_call) if self.active_call else None,
                 "backend": self.engine.backend_name,
+                "engine_error": getattr(self.engine, "start_error", None),
                 "registrations": self.engine.registrations(),
             }
 

@@ -63,6 +63,9 @@ class BaseEngine:
         # the gaps between dialling successive targets.
         self._outbound_active = False
         self._call_ids = itertools.count(1)
+        # Set by app startup when start() raises, so the web UI can show why
+        # the SIP engine is not running instead of the whole process dying.
+        self.start_error: Optional[str] = None
 
     # -- lifecycle (override) ---------------------------------------------- #
     def start(self) -> None:
