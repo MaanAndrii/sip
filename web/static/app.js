@@ -35,12 +35,30 @@ function showRestartBanner() {
   $("#restart-banner").classList.remove("hidden");
 }
 
+let restarting = false;
+function waitForRestart() {
+  if (restarting) return;
+  restarting = true;
+  $("#restart-banner").classList.add("hidden");
+  $("#restarting-banner").classList.remove("hidden");
+  // The service restarts ~1.5s after replying; give it a head start, then poll
+  // until it answers again and reload.
+  const poll = () => {
+    fetch("/api/status", { cache: "no-store" })
+      .then((r) => { if (r.ok || r.status === 401) location.reload(); else setTimeout(poll, 2000); })
+      .catch(() => setTimeout(poll, 2000));
+  };
+  setTimeout(poll, 3500);
+}
+
 async function saveSection(path, body, okMsg) {
   const res = await apiPost(path, body);
   if (!res) return;
   if (res.ok) {
     toast(okMsg || "Збережено", "ok");
-    if (res.data && res.data.restart_required) showRestartBanner();
+    const d = res.data || {};
+    if (d.restarting) waitForRestart();
+    else if (d.restart_required) showRestartBanner();
   } else {
     toast((res.data && res.data.error) || "Помилка збереження", "err");
   }
@@ -282,6 +300,64 @@ if (window.IS_MOCK) {
 }
 
 // --------------------------------------------------------------------------- //
+// Call log
+// --------------------------------------------------------------------------- //
+const RESULT_LABELS = {
+  answered: "Відповіли",
+  busy: "Зайнято",
+  rejected: "Відхилено",
+  "no answer": "Не відповіли",
+  canceled: "Скасовано",
+  failed: "Помилка",
+};
+
+function fmtTime(ts) {
+  if (!ts) return "";
+  return new Date(ts * 1000).toLocaleString("uk-UA");
+}
+function fmtDur(s) {
+  if (!s) return "—";
+  const m = Math.floor(s / 60), sec = s % 60;
+  return (m ? m + " хв " : "") + sec + " с";
+}
+function shortNum(remote) {
+  if (!remote) return "";
+  const m = String(remote).match(/sip:([^@;>]+)@?/);
+  return m ? m[1] : remote;
+}
+
+function renderCalls(list) {
+  const body = $("#calls-body");
+  body.innerHTML = "";
+  $("#calls-empty").classList.toggle("hidden", list.length > 0);
+  list.forEach((c) => {
+    const tr = document.createElement("tr");
+    const dir = c.direction === "in" ? "Вхідний" : "Вихідний";
+    const dirCls = c.direction === "in" ? "dir-in" : "dir-out";
+    const resKey = c.result || "failed";
+    const resCls = resKey.replace(/ /g, "-");
+    tr.innerHTML = `
+      <td class="num">${esc(fmtTime(c.started_at))}</td>
+      <td class="${dirCls}">${dir}</td>
+      <td>${esc(shortNum(c.remote))}</td>
+      <td>${esc(c.account_id || "")}</td>
+      <td><span class="res ${resCls}">${esc(RESULT_LABELS[resKey] || resKey)}</span></td>
+      <td class="num">${esc(fmtDur(c.duration))}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+async function loadCalls() {
+  const list = await apiGet("/api/calls");
+  if (list) renderCalls(list);
+}
+
+$("#clear-calls").addEventListener("click", async () => {
+  await apiPost("/api/calls/clear");
+  loadCalls();
+});
+
+// --------------------------------------------------------------------------- //
 // Live status
 // --------------------------------------------------------------------------- //
 const STATE_LABELS = {
@@ -335,6 +411,8 @@ function connectEvents() {
       apiGet("/api/status").then((s) => s && renderRegistrations(s.registrations));
     } else if (data.type === "incoming_busy") {
       toast("Вхідний відхилено (зайнято): " + (data.remote || ""), "err");
+    } else if (data.type === "calllog") {
+      loadCalls();
     }
   };
   es.onerror = () => { /* EventSource auto-reconnects */ };
@@ -379,6 +457,7 @@ async function init() {
     renderState(status.state, status.call);
     renderRegistrations(status.registrations);
   }
+  await loadCalls();
   connectEvents();
 }
 

@@ -10,3 +10,6 @@ config.json
 dev-config.json
 *.config.json
 !config/config.example.json
+
+# Runtime call history
+call_log.json

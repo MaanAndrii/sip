@@ -19,6 +19,7 @@ import threading
 
 from .button import ButtonInterface
 from .call_controller import CallController
+from .calllog import CallLog
 from .config import Config
 from .events import EventBus
 from .sip_engine import create_engine
@@ -59,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
 
     engine = create_engine(config, bus, force_mock=args.mock)
     controller = CallController(config, bus, engine)
+    # Call history lives next to the config file.
+    calllog_path = os.path.join(os.path.dirname(os.path.abspath(args.config)), "call_log.json")
+    calllog = CallLog(bus, calllog_path)
     button = ButtonInterface(config, bus, controller)
 
     log.info("SIP engine backend: %s", engine.backend_name)
@@ -70,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
 
     button.start()
 
-    app = create_app(config, bus, controller, engine)
+    app = create_app(config, bus, controller, engine, calllog)
     host = config.get("web", "host", default="0.0.0.0")
     port = int(config.get("web", "port", default=8080))
 

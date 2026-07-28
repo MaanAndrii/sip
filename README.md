@@ -21,6 +21,10 @@ machine in a mock mode for development.
   outbound call/attempt is in progress.
 - Web UI with login (default **admin/admin**), live status via SSE, and full
   configuration (accounts, numbers, incoming, audio, GPIO, password).
+- **Call log** of the last 50 in/out calls (result + duration), persisted to
+  disk.
+- **Automatic service restart** on saving settings that need it (accounts,
+  codecs, audio, GPIO, web port); dial/incoming settings apply live.
 - Runs as a `systemd` service.
 
 ## Architecture

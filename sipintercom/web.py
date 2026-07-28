@@ -27,9 +27,11 @@ from flask import (
 )
 
 from .call_controller import CallController
+from .calllog import CallLog
 from .config import Config, verify_password
 from .events import EventBus
 from .sip_engine import BaseEngine, MockEngine
+from .system import schedule_restart
 
 log = logging.getLogger("sipintercom.web")
 
@@ -42,6 +44,7 @@ def create_app(
     bus: EventBus,
     controller: CallController,
     engine: BaseEngine,
+    calllog: CallLog,
 ) -> Flask:
     app = Flask(
         __name__,
@@ -108,6 +111,20 @@ def create_app(
         return jsonify(config.redacted())
 
     # ------------------------------------------------------------------ #
+    # Call history
+    # ------------------------------------------------------------------ #
+    @app.route("/api/calls")
+    @login_required
+    def api_calls():
+        return jsonify(calllog.entries())
+
+    @app.route("/api/calls/clear", methods=["POST"])
+    @login_required
+    def api_calls_clear():
+        calllog.clear()
+        return jsonify({"ok": True})
+
+    # ------------------------------------------------------------------ #
     # Live event stream (Server-Sent Events)
     # ------------------------------------------------------------------ #
     @app.route("/api/events")
@@ -165,8 +182,19 @@ def create_app(
     # ------------------------------------------------------------------ #
     # Settings (write)
     # ------------------------------------------------------------------ #
-    def _restart_note(section: str) -> dict:
-        return {"ok": True, "restart_required": section in _RESTART_SECTIONS}
+    def _restart_note(section: str, need: bool | None = None) -> dict:
+        """Standard save response. When the changed section needs a restart to
+        take effect, trigger an automatic (debounced) service restart."""
+        needs = (section in _RESTART_SECTIONS) if need is None else need
+        restarting = schedule_restart() if needs else False
+        return {
+            "ok": True,
+            "restart_required": needs,
+            # True: the service is restarting itself now (systemd).
+            # False + restart_required: manual restart needed (dev/non-systemd).
+            "restarting": restarting,
+            "manual_restart": needs and not restarting,
+        }
 
     @app.route("/api/accounts", methods=["POST"])
     @login_required
@@ -261,12 +289,16 @@ def create_app(
         patch = {}
         if "username" in body and body["username"]:
             patch["username"] = str(body["username"])
-        if "host" in body:
+        # Only host/port changes bind the socket, so only those need a restart.
+        needs_restart = False
+        if "host" in body and str(body["host"]) != config.get("web", "host"):
             patch["host"] = str(body["host"])
-        if "port" in body:
+            needs_restart = True
+        if "port" in body and int(body["port"]) != int(config.get("web", "port")):
             patch["port"] = int(body["port"])
+            needs_restart = True
         config.update_section("web", patch)
-        return jsonify(_restart_note("web"))
+        return jsonify(_restart_note("web", need=needs_restart))
 
     @app.route("/api/password", methods=["POST"])
     @login_required

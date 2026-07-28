@@ -28,11 +28,16 @@
     <code>sudo systemctl restart sip-intercom</code>
   </div>
 
+  <div id="restarting-banner" class="alert warn banner hidden">
+    Застосування змін — перезапуск служби… Сторінка оновиться автоматично.
+  </div>
+
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">Панель</button>
     <button class="tab" data-tab="accounts">Акаунти</button>
     <button class="tab" data-tab="targets">Номери</button>
     <button class="tab" data-tab="incoming">Вхідні</button>
+    <button class="tab" data-tab="calls">Журнал</button>
     <button class="tab" data-tab="audio">Аудіо</button>
     <button class="tab" data-tab="gpio">Кнопка/GPIO</button>
     <button class="tab" data-tab="system">Система</button>
@@ -112,6 +117,21 @@
         <input type="checkbox" id="in-busy"> Відхиляти вхідні (зайнято) під час активного виклику
       </label>
       <button id="save-incoming" class="btn primary">Зберегти</button>
+    </section>
+
+    <!-- Call log -->
+    <section id="tab-calls" class="panel">
+      <div class="panel-head">
+        <h2>Журнал викликів <span class="muted">(останні 50)</span></h2>
+        <button id="clear-calls" class="btn ghost">Очистити</button>
+      </div>
+      <table class="calls-table">
+        <thead>
+          <tr><th>Час</th><th>Напрям</th><th>Номер</th><th>Акаунт</th><th>Результат</th><th>Тривалість</th></tr>
+        </thead>
+        <tbody id="calls-body"></tbody>
+      </table>
+      <p id="calls-empty" class="hint hidden">Журнал порожній.</p>
     </section>
 
     <!-- Audio -->
