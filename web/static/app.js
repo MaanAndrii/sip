@@ -309,6 +309,8 @@ const RESULT_LABELS = {
   "no answer": "Не відповіли",
   canceled: "Скасовано",
   failed: "Помилка",
+  interrupted: "Перервано",
+  active: "В процесі",
 };
 
 function fmtTime(ts) {
@@ -334,14 +336,16 @@ function renderCalls(list) {
     const tr = document.createElement("tr");
     const dir = c.direction === "in" ? "Вхідний" : "Вихідний";
     const dirCls = c.direction === "in" ? "dir-in" : "dir-out";
-    const resKey = c.result || "failed";
+    const resKey = c.result || "active";
     const resCls = resKey.replace(/ /g, "-");
+    // Show the SIP reason/code on failures to aid diagnosis.
+    const title = c.code ? `${c.code} ${c.reason || ""}`.trim() : (c.reason || "");
     tr.innerHTML = `
       <td class="num">${esc(fmtTime(c.started_at))}</td>
       <td class="${dirCls}">${dir}</td>
       <td>${esc(shortNum(c.remote))}</td>
       <td>${esc(c.account_id || "")}</td>
-      <td><span class="res ${resCls}">${esc(RESULT_LABELS[resKey] || resKey)}</span></td>
+      <td><span class="res ${resCls}" title="${esc(title)}">${esc(RESULT_LABELS[resKey] || resKey)}</span></td>
       <td class="num">${esc(fmtDur(c.duration))}</td>`;
     body.appendChild(tr);
   });

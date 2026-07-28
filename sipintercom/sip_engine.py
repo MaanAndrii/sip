@@ -484,6 +484,17 @@ class PjsuaEngine(BaseEngine):
             with self._lock:
                 self._pj_calls.pop(call_id, None)
             raise SipEngineError(str(exc)) from exc
+        # Publish "calling" right away so the call is visible immediately and
+        # the controller/journal don't depend solely on the state callback.
+        self._publish_call(
+            call_id=call_id,
+            account_id=account_id,
+            direction="out",
+            state=ST_CALLING,
+            code=0,
+            reason="dialing",
+            remote=target,
+        )
         return call_id
 
     def hangup(self, call_id: str) -> None:

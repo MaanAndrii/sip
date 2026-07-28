@@ -136,6 +136,20 @@ class CallController:
                     call_id = self.engine.make_call(account_id, number)
                 except SipEngineError as exc:
                     log.error("Cannot dial %s: %s", label, exc)
+                    # Record the failed attempt in the journal so the reason is
+                    # visible (e.g. unknown/disabled account, engine down).
+                    self.bus.publish(
+                        {
+                            "type": "call",
+                            "call_id": f"err{time.monotonic_ns()}",
+                            "account_id": account_id,
+                            "direction": "out",
+                            "state": ST_DISCONNECTED,
+                            "code": 0,
+                            "reason": str(exc),
+                            "remote": number,
+                        }
+                    )
                     continue
 
                 with self._lock:

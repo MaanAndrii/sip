@@ -1,9 +1,11 @@
 """Call history — the last N outbound and inbound calls.
 
-Subscribes to the event bus and builds one record per call (per INVITE),
-tracking start / answer / end and classifying the outcome. Keeps at most
-``max_entries`` records (default 50), newest last, and persists them to a JSON
-file so history survives restarts.
+Subscribes to the event bus and keeps one record per call (per INVITE). A
+record is created and shown **as soon as the call starts** (ringing), then
+updated in place as it is answered and ends, so a call is visible in the log
+immediately — not only once it finishes. Keeps at most ``max_entries`` records
+(default 50), newest last, and persists them to a JSON file so history survives
+restarts.
 """
 
 from __future__ import annotations
@@ -31,10 +33,12 @@ def _classify(answered: bool, code: int) -> str:
         return "rejected"
     if code == 487:
         return "canceled"
+    if code in (401, 403, 404, 407):
+        return "failed"
     if code in (408, 480, 484, 500, 503):
         return "no answer"
     # 0 == local hangup (ring timeout / cancel) — treat as no answer.
-    return "no answer" if code in (0, 180, 100) else "failed"
+    return "no answer" if code in (0, 100, 180, 183) else "failed"
 
 
 class CallLog:
@@ -44,7 +48,7 @@ class CallLog:
         self.max = max_entries
         self._lock = threading.RLock()
         self._entries: deque[dict] = deque(maxlen=max_entries)  # oldest..newest
-        self._active: dict[str, dict] = {}  # call_id -> in-progress record
+        self._active: dict[str, dict] = {}  # call_id -> record (also in _entries)
         self._load()
         bus.subscribe(self._on_event)
 
@@ -55,6 +59,10 @@ class CallLog:
                 with open(self.path, encoding="utf-8") as fh:
                     data = json.load(fh)
                 for entry in data[-self.max:]:
+                    # A record still "in progress" at the last shutdown is stale.
+                    if entry.get("result") is None:
+                        entry["result"] = "interrupted"
+                        entry["ended_at"] = entry.get("ended_at") or entry.get("started_at")
                     self._entries.append(entry)
         except Exception:
             log.exception("failed to load call log")
@@ -90,29 +98,39 @@ class CallLog:
             "answered_at": None,
             "ended_at": None,
             "duration": 0,
-            "result": None,
+            "result": None,  # None == in progress
             "code": ev.get("code", 0),
             "reason": ev.get("reason", ""),
         }
 
-    def _on_call(self, ev: dict) -> None:
+    def _ensure(self, ev: dict) -> dict:
+        """Return the record for this call, creating + listing it if new."""
         cid = ev["call_id"]
+        entry = self._active.get(cid)
+        if entry is None:
+            entry = self._base(ev)
+            self._active[cid] = entry
+            self._entries.append(entry)
+        return entry
+
+    def _on_call(self, ev: dict) -> None:
         state = ev["state"]
         with self._lock:
-            entry = self._active.get(cid)
             if state in ("calling", "early"):
-                if entry is None:
-                    self._active[cid] = self._base(ev)
+                self._ensure(ev)
             elif state == "confirmed":
-                if entry is None:
-                    entry = self._base(ev)
-                    self._active[cid] = entry
-                entry["answered"] = True
-                entry["answered_at"] = time.time()
+                entry = self._ensure(ev)
+                if not entry["answered"]:
+                    entry["answered"] = True
+                    entry["answered_at"] = time.time()
             elif state == "disconnected":
-                if entry is None:
-                    entry = self._base(ev)
-                self._finalize(cid, entry, ev.get("code", 0), ev.get("reason", ""))
+                entry = self._ensure(ev)
+                self._finalize(entry, ev.get("code", 0), ev.get("reason", ""))
+                self._active.pop(ev["call_id"], None)
+            else:
+                return
+            self._save()
+        self.bus.publish({"type": "calllog"})
 
     def _log_busy(self, ev: dict) -> None:
         with self._lock:
@@ -126,17 +144,13 @@ class CallLog:
             self._save()
         self.bus.publish({"type": "calllog"})
 
-    def _finalize(self, cid: str, entry: dict, code: int, reason: str) -> None:
+    def _finalize(self, entry: dict, code: int, reason: str) -> None:
         entry["ended_at"] = time.time()
         entry["code"] = code
         entry["reason"] = reason
         if entry["answered"] and entry.get("answered_at"):
             entry["duration"] = max(0, int(entry["ended_at"] - entry["answered_at"]))
         entry["result"] = _classify(entry["answered"], code)
-        self._active.pop(cid, None)
-        self._entries.append(entry)
-        self._save()
-        self.bus.publish({"type": "calllog"})
 
     # -- access ------------------------------------------------------------- #
     def entries(self) -> list[dict]:
@@ -147,5 +161,6 @@ class CallLog:
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
+            self._active.clear()
             self._save()
         self.bus.publish({"type": "calllog"})

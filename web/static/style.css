@@ -137,8 +137,9 @@ h3 { font-size: 16px; margin: 18px 0 10px; }
 .dir-out { color: var(--muted); }
 .res { font-size: 12px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
 .res.answered { background: rgba(46,160,67,.18); color: var(--green); }
-.res.busy, .res.rejected { background: rgba(218,54,51,.16); color: #ff9d99; }
-.res.no-answer, .res.canceled, .res.failed { background: rgba(210,153,34,.16); color: #ffd479; }
+.res.busy, .res.rejected, .res.failed { background: rgba(218,54,51,.16); color: #ff9d99; }
+.res.no-answer, .res.canceled, .res.interrupted { background: rgba(210,153,34,.16); color: #ffd479; }
+.res.active { background: rgba(47,129,247,.16); color: #9ac4ff; }
 
 /* ---- Alerts / banners ---- */
 .alert { padding: 10px 14px; border-radius: 8px; font-size: 14px; }
