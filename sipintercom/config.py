@@ -89,6 +89,11 @@ DEFAULTS: dict[str, Any] = {
         "rx_gain": 1.0,
         # Echo cancellation tail in ms (0 disables). Handy on a speakerphone.
         "ec_tail_ms": 200,
+        # Use PJSIP's null audio device instead of a real sound card. Enable
+        # this on a headless box / VPS with no audio hardware: the greeting is
+        # still played to the caller and the remote side is still recorded, but
+        # the local mic/speaker are silent. Leave off on the Pi with real audio.
+        "null_device": False,
     },
     "gpio": {
         # BCM numbering. I2S uses 18/19/20/21, so those are avoided.

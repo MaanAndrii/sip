@@ -96,3 +96,13 @@ arecord -D default -f S16_LE -r 8000 -c1 -d 3 /tmp/t.wav && aplay -D default /tm
 ```
 
 Fine-trim gains and echo-cancellation tail in the web UI (**Аудіо** tab).
+
+## Headless / VPS testing (no sound card)
+
+Testing on a server with no audio hardware? Enable **«Без звукової карти
+(VPS/тест)»** in the **Аудіо** tab (config: `audio.null_device = true`) and
+save. PJSIP then uses its null audio device instead of ALSA, so calls no longer
+fail trying to open a sound card. In this mode the **greeting is still played
+to the caller** and the **remote party is still recorded** (both are file-based
+and need no hardware); only the local microphone and speaker are silent. Turn it
+**off** on the real device with a USB card / I2S HAT.

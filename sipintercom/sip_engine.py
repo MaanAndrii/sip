@@ -444,11 +444,33 @@ class PjsuaEngine(BaseEngine):
             prio = max(prio - 10, 1)
 
     def _configure_audio(self) -> None:
-        # With no sound device the library falls back to null audio; on the Pi
-        # the I2S HAT is the default ALSA device so the default capture/playback
-        # indices are correct. Explicit device selection by name could be added
-        # here via audDevManager().getDevInfo enumeration if needed.
-        pass
+        # On a headless box / VPS with no sound card, opening the real ALSA
+        # device fails and breaks call media. Switch to PJSIP's null device so
+        # file-based media still works: the greeting is played to the caller and
+        # the remote party is recorded; only the local mic/speaker go silent.
+        adm = self._ep.audDevManager()
+        if bool(self.config.get("audio", "null_device", default=False)):
+            try:
+                adm.setNullDev()
+                log.warning(
+                    "Audio: null device (no sound card). Live mic/speaker "
+                    "disabled; greeting playback and remote-side recording still "
+                    "work."
+                )
+                return
+            except Exception:
+                log.exception("failed to set null audio device")
+        # Otherwise use the default device. If that cannot be enumerated (no
+        # hardware and the flag was not set), fall back to the null device so
+        # the process still runs instead of failing on the first call.
+        try:
+            adm.getDevCount()
+        except Exception:
+            log.warning("Audio: no usable sound device — falling back to null.")
+            try:
+                adm.setNullDev()
+            except Exception:
+                log.exception("null audio fallback failed")
 
     def _create_accounts(self) -> None:
         pj = self._pj

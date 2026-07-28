@@ -344,6 +344,8 @@ def create_app(
                 patch[key] = float(body[key])
         if "ec_tail_ms" in body:
             patch["ec_tail_ms"] = max(0, int(body["ec_tail_ms"]))
+        if "null_device" in body:
+            patch["null_device"] = bool(body["null_device"])
         config.update_section("audio", patch)
         return jsonify(_restart_note("audio"))
 

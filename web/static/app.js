@@ -254,6 +254,7 @@ $("#save-audio").addEventListener("click", () => saveSection("/api/audio", {
   tx_gain: parseFloat($("#au-tx").value),
   rx_gain: parseFloat($("#au-rx").value),
   ec_tail_ms: parseInt($("#au-ec").value, 10) || 0,
+  null_device: $("#au-null").checked,
 }, "Аудіо збережено"));
 
 $("#save-gpio").addEventListener("click", () => saveSection("/api/gpio", {
@@ -491,6 +492,7 @@ async function init() {
   $("#au-tx").value = cfg.audio.tx_gain;
   $("#au-rx").value = cfg.audio.rx_gain;
   $("#au-ec").value = cfg.audio.ec_tail_ms;
+  $("#au-null").checked = !!cfg.audio.null_device;
 
   $("#gp-button").value = cfg.gpio.button_pin;
   $("#gp-led").value = cfg.gpio.led_pin;
