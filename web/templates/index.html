@@ -170,12 +170,13 @@
     <section id="tab-audio" class="panel">
       <h2>Аудіо</h2>
       <p class="hint">I2S HAT конфігурується як пристрій ALSA за замовчуванням у setup-скрипті. Значення нижче — для тонкого налаштування.</p>
-      <label class="inline">Пристрій запису (ALSA)
-        <input type="text" id="au-capture" class="wide">
+      <label class="inline">Мікрофон (вхід)
+        <select id="au-capture" class="wide"></select>
       </label>
-      <label class="inline">Пристрій відтворення (ALSA)
-        <input type="text" id="au-playback" class="wide">
+      <label class="inline">Динамік (вихід)
+        <select id="au-playback" class="wide"></select>
       </label>
+      <p class="hint">Список — виявлені звукові пристрої. «Системний за замовчуванням» лишає вибір за ОС. Обери свою USB-картку (напр. H1n). Потрібен перезапуск (застосується автоматично).</p>
       <label class="inline">Підсилення мікрофона (TX)
         <input type="number" id="au-tx" step="0.1" min="0" max="2" class="small">
       </label>

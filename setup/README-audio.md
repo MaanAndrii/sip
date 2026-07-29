@@ -46,6 +46,11 @@ micro-USB **OTG** adapter.
 3. Set levels with `alsamixer` (press **F6**, pick the USB card; unmute Mic and
    set Speaker/Mic gain).
 
+4. In the web UI **Аудіо** tab, pick the USB card in **Мікрофон (вхід)** and
+   **Динамік (вихід)** and save. This selects the device inside PJSIP directly
+   (by name), which is more reliable than relying on the ALSA default when the
+   Pi has several cards (onboard + HDMI + USB). Leave **null device** off.
+
 ---
 
 ## Option B — Pi 4 onboard output + USB microphone (budget)

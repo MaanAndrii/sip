@@ -118,6 +118,11 @@ def create_app(
     def api_config():
         return jsonify(config.redacted())
 
+    @app.route("/api/audio/devices")
+    @login_required
+    def api_audio_devices():
+        return jsonify(engine.list_audio_devices())
+
     # ------------------------------------------------------------------ #
     # Call history
     # ------------------------------------------------------------------ #

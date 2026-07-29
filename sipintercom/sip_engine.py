@@ -98,6 +98,10 @@ class BaseEngine:
         with self._lock:
             return {k: dict(v) for k, v in self._reg.items()}
 
+    def list_audio_devices(self) -> list[dict]:
+        """Available audio devices (real backend only). Base/mock: none."""
+        return []
+
     def _publish_reg(self, account_id: str, registered: bool, code: int, reason: str):
         with self._lock:
             self._reg[account_id] = {
@@ -501,17 +505,42 @@ class PjsuaEngine(BaseEngine):
                 return
             except Exception:
                 log.exception("failed to set null audio device")
-        # Otherwise use the default device. If that cannot be enumerated (no
-        # hardware and the flag was not set), fall back to the null device so
-        # the process still runs instead of failing on the first call.
+        # Otherwise use the configured devices (by name) or the system default.
         try:
-            adm.getDevCount()
+            count = adm.getDevCount()
         except Exception:
             log.warning("Audio: no usable sound device — falling back to null.")
             try:
                 adm.setNullDev()
             except Exception:
                 log.exception("null audio fallback failed")
+            return
+
+        cap = str(self.config.get("audio", "capture_dev", default="default"))
+        play = str(self.config.get("audio", "playback_dev", default="default"))
+        ci = self._find_audio_dev(cap, need_input=True)
+        pi = self._find_audio_dev(play, need_input=False)
+        try:
+            if ci is not None and pi is not None:
+                adm.setCaptureDev(ci)
+                adm.setPlaybackDev(pi)
+                log.info("Audio devices set: capture=%s playback=%s", ci, pi)
+            elif ci is not None or pi is not None:
+                # PJSIP needs both set together; use one match for both if it can
+                # do input+output, else leave defaults.
+                idx = ci if ci is not None else pi
+                adm.setCaptureDev(idx)
+                adm.setPlaybackDev(idx)
+                log.info("Audio device set (single match): %s", idx)
+            else:
+                if cap.lower() != "default" or play.lower() != "default":
+                    log.warning(
+                        "Audio: requested device(s) not found (capture=%r "
+                        "playback=%r); using system default of %d devices.",
+                        cap, play, count,
+                    )
+        except Exception:
+            log.exception("failed to select audio device; using default")
 
     def _create_accounts(self) -> None:
         pj = self._pj
@@ -580,6 +609,45 @@ class PjsuaEngine(BaseEngine):
     def _has_active_call(self) -> bool:
         with self._lock:
             return bool(self._pj_calls)
+
+    def list_audio_devices(self) -> list[dict]:
+        if self._ep is None:
+            return []
+        out: list[dict] = []
+        try:
+            adm = self._ep.audDevManager()
+            for i in range(adm.getDevCount()):
+                info = adm.getDevInfo(i)
+                out.append(
+                    {
+                        "index": i,
+                        "name": info.name,
+                        "inputs": info.inputCount,
+                        "outputs": info.outputCount,
+                    }
+                )
+        except Exception:
+            log.exception("failed to enumerate audio devices")
+        return out
+
+    def _find_audio_dev(self, name: str, need_input: bool) -> Optional[int]:
+        """Find a device index whose name contains *name* (case-insensitive)."""
+        if not name or name.lower() == "default":
+            return None
+        try:
+            adm = self._ep.audDevManager()
+            for i in range(adm.getDevCount()):
+                info = adm.getDevInfo(i)
+                if name.lower() not in (info.name or "").lower():
+                    continue
+                if need_input and info.inputCount <= 0:
+                    continue
+                if not need_input and info.outputCount <= 0:
+                    continue
+                return i
+        except Exception:
+            log.exception("audio device lookup failed")
+        return None
 
     # -- outbound ---------------------------------------------------------- #
     def make_call(self, account_id: str, number: str) -> str:

@@ -264,6 +264,38 @@ $("#save-incoming").addEventListener("click", () => saveSection("/api/incoming",
   busy_when_in_call: $("#in-busy").checked,
 }, "Налаштування вхідних збережено"));
 
+async function populateAudioDevices(curCapture, curPlayback) {
+  const devices = (await apiGet("/api/audio/devices")) || [];
+  const fill = (sel, cur, wantInput) => {
+    const el = $(sel);
+    el.innerHTML = "";
+    const def = document.createElement("option");
+    def.value = "default";
+    def.textContent = "Системний за замовчуванням";
+    el.appendChild(def);
+    const names = [];
+    devices
+      .filter((d) => (wantInput ? d.inputs > 0 : d.outputs > 0))
+      .forEach((d) => {
+        const o = document.createElement("option");
+        o.value = d.name;
+        o.textContent = `${d.name} (${wantInput ? d.inputs + " вх" : d.outputs + " вих"})`;
+        el.appendChild(o);
+        names.push(d.name);
+      });
+    // Keep the stored value selectable even if the device is absent now.
+    if (cur && cur !== "default" && !names.includes(cur)) {
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = `${cur} (не виявлено)`;
+      el.appendChild(o);
+    }
+    el.value = cur || "default";
+  };
+  fill("#au-capture", curCapture, true);
+  fill("#au-playback", curPlayback, false);
+}
+
 $("#save-audio").addEventListener("click", () => saveSection("/api/audio", {
   capture_dev: $("#au-capture").value.trim(),
   playback_dev: $("#au-playback").value.trim(),
@@ -503,8 +535,7 @@ async function init() {
 
   renderMedia(cfg.media);
 
-  $("#au-capture").value = cfg.audio.capture_dev;
-  $("#au-playback").value = cfg.audio.playback_dev;
+  await populateAudioDevices(cfg.audio.capture_dev, cfg.audio.playback_dev);
   $("#au-tx").value = cfg.audio.tx_gain;
   $("#au-rx").value = cfg.audio.rx_gain;
   $("#au-ec").value = cfg.audio.ec_tail_ms;
