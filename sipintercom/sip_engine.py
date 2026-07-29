@@ -417,18 +417,59 @@ class PjsuaEngine(BaseEngine):
         ep.libInit(ep_cfg)
 
         # UDP transport (standard SIP provider, no TLS needed per spec).
-        tcfg = pj.TransportConfig()
-        tcfg.port = 5060
-        ep.transportCreate(pj.PJSIP_TRANSPORT_UDP, tcfg)
+        self._ep = ep
+        self._create_transports()
 
         ep.libStart()
-        self._ep = ep
 
         self._configure_codecs()
         self._configure_audio()
         self._create_accounts()
 
         log.info("PJSUA2 engine started.")
+
+    def _create_transports(self) -> None:
+        """Create the SIP transports required by the configured accounts.
+
+        UDP always exists; TCP/TLS are created only if some account uses them.
+        TLS (port 5061) is what an encrypted setup (e.g. Linphone) expects for
+        signalling; SRTP for media is configured per account.
+        """
+        pj, ep = self._pj, self._ep
+        self._transport_ids: dict[str, int] = {}
+        needed = {
+            (a.get("transport") or "udp").lower() for a in self._accounts()
+        }
+        needed.add("udp")  # keep UDP available as a fallback
+
+        if "udp" in needed:
+            t = pj.TransportConfig()
+            t.port = 5060
+            self._transport_ids["udp"] = ep.transportCreate(
+                pj.PJSIP_TRANSPORT_UDP, t
+            )
+        if "tcp" in needed:
+            t = pj.TransportConfig()
+            t.port = 5060
+            self._transport_ids["tcp"] = ep.transportCreate(
+                pj.PJSIP_TRANSPORT_TCP, t
+            )
+        if "tls" in needed:
+            t = pj.TransportConfig()
+            t.port = 5061
+            # Lenient by default (no client cert, don't verify the server) so it
+            # works against public services without shipping a CA bundle. A CA
+            # file could be set on t.tlsConfig.CaListFile to enable verification.
+            t.tlsConfig.verifyServer = False
+            t.tlsConfig.verifyClient = False
+            try:
+                self._transport_ids["tls"] = ep.transportCreate(
+                    pj.PJSIP_TRANSPORT_TLS, t
+                )
+            except Exception:
+                log.exception(
+                    "Failed to create TLS transport (is PJSIP built with TLS?)"
+                )
 
     def _configure_codecs(self) -> None:
         pj, ep = self._pj, self._ep
@@ -478,12 +519,33 @@ class PjsuaEngine(BaseEngine):
             acc_cfg = pj.AccountConfig()
             domain = acc["domain"]
             user = acc["username"]
+            transport = (acc.get("transport") or "udp").lower()
+            tparam = "" if transport == "udp" else f";transport={transport}"
+
             acc_cfg.idUri = f'"{acc.get("display_name", user)}" <sip:{user}@{domain}>'
             registrar = acc.get("registrar") or domain
-            acc_cfg.regConfig.registrarUri = f"sip:{registrar}"
+            acc_cfg.regConfig.registrarUri = f"sip:{registrar}{tparam}"
             acc_cfg.regConfig.timeoutSec = int(acc.get("reg_interval", 300))
             if acc.get("proxy"):
-                acc_cfg.sipConfig.proxies.append(f"sip:{acc['proxy']}")
+                acc_cfg.sipConfig.proxies.append(f"sip:{acc['proxy']}{tparam}")
+
+            # Bind the account to the matching transport (so TLS actually goes
+            # over the TLS transport, etc.).
+            tid = getattr(self, "_transport_ids", {}).get(transport)
+            if tid is not None:
+                acc_cfg.sipConfig.transportId = tid
+
+            # Media encryption (SRTP/SDES).
+            srtp = (acc.get("srtp") or "none").lower()
+            if srtp == "optional":
+                acc_cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_OPTIONAL
+            elif srtp == "mandatory":
+                acc_cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_MANDATORY
+            else:
+                acc_cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_DISABLED
+            # SDES keys ride in the SDP, so require a secure (TLS) transport for
+            # them when SRTP is on and we're using TLS.
+            acc_cfg.mediaConfig.srtpSecureSignaling = 1 if transport == "tls" else 0
 
             cred = pj.AuthCredInfo(
                 "digest",
@@ -535,6 +597,10 @@ class PjsuaEngine(BaseEngine):
             target = number if number.startswith("sip:") else f"sip:{number}"
         else:
             target = f"sip:{number}@{acc_cfg['domain']}"
+        # Route the call over the account's transport (TLS/TCP) as well.
+        transport = (acc_cfg.get("transport") or "udp").lower()
+        if transport != "udp" and ";transport=" not in target:
+            target += f";transport={transport}"
 
         call_id = f"o{next(self._call_ids)}"
         call = _PjCall(self, account, account_id, call_id, direction="out")

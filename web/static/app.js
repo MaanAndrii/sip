@@ -124,6 +124,20 @@ function accountRow(acc = {}) {
         <input class="f-proxy" type="text" value="${esc(acc.proxy)}">
       </label>
     </div>
+    <div class="row">
+      <label>Транспорт
+        <select class="f-transport">
+          ${["udp", "tcp", "tls"].map((t) => `<option value="${t}" ${(acc.transport || "udp") === t ? "selected" : ""}>${t.toUpperCase()}</option>`).join("")}
+        </select>
+      </label>
+      <label>Шифрування (SRTP)
+        ${(() => { const v = acc.srtp || "none"; return `<select class="f-srtp">
+          <option value="none" ${v === "none" ? "selected" : ""}>Немає</option>
+          <option value="optional" ${v === "optional" ? "selected" : ""}>SRTP (опц.)</option>
+          <option value="mandatory" ${v === "mandatory" ? "selected" : ""}>SRTP (обов.)</option>
+        </select>`; })()}
+      </label>
+    </div>
     <label class="switch-row">
       <input class="f-enabled" type="checkbox" ${acc.enabled === false ? "" : "checked"}> Увімкнено
     </label>
@@ -148,6 +162,8 @@ function collectAccounts() {
     password: row.querySelector(".f-pass").value,
     registrar: row.querySelector(".f-registrar").value.trim(),
     proxy: row.querySelector(".f-proxy").value.trim(),
+    transport: row.querySelector(".f-transport").value,
+    srtp: row.querySelector(".f-srtp").value,
     enabled: row.querySelector(".f-enabled").checked,
   }));
 }

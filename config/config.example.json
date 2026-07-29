@@ -19,6 +19,7 @@
         "registrar": "",
         "proxy": "",
         "transport": "udp",
+        "srtp": "none",
         "reg_interval": 300
       }
     ],
