@@ -44,7 +44,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
   build-essential git pkg-config swig python3 python3-dev python3-venv \
   libasound2-dev libssl-dev libopus-dev alsa-utils curl ca-certificates \
-  ffmpeg
+  ffmpeg liblgpio-dev
 
 echo "==> Creating app directory $APP_DIR"
 mkdir -p "$APP_DIR" "$CFG_DIR" "$BUILD_DIR"
@@ -57,8 +57,14 @@ python3 -m venv "$VENV"
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 pip install --upgrade pip wheel
-# Web + GPIO deps. lgpio is the modern pin factory for gpiozero on bookworm.
-pip install "Flask>=3.0,<4.0" "gpiozero>=2.0" "lgpio>=0.2"
+# Web + GPIO deps. lgpio is the modern pin factory for gpiozero on bookworm and
+# needs liblgpio-dev (installed above) to build its native extension. Keep it
+# best-effort so a GPIO build issue doesn't abort the whole install — the app
+# runs without it (physical button disabled, web button still works).
+pip install "Flask>=3.0,<4.0" "gpiozero>=2.0"
+pip install "lgpio>=0.2" || echo \
+  "WARNING: lgpio failed to build — check that liblgpio-dev is installed. " \
+  "GPIO button/LED will be disabled; the web interface still works."
 
 # --------------------------------------------------------------------------- #
 # SWIG: PJSUA2's Python bindings do NOT compile with SWIG 4.1+ (the version on
