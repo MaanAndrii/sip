@@ -141,6 +141,9 @@ function accountRow(acc = {}) {
     <label class="switch-row">
       <input class="f-enabled" type="checkbox" ${acc.enabled === false ? "" : "checked"}> Увімкнено
     </label>
+    <label class="switch-row">
+      <input class="f-presence" type="checkbox" ${acc.presence === false ? "" : "checked"}> Публікувати присутність (online-статус)
+    </label>
   `;
   div.querySelector(".remove-btn").addEventListener("click", () => div.remove());
   return div;
@@ -164,6 +167,7 @@ function collectAccounts() {
     proxy: row.querySelector(".f-proxy").value.trim(),
     transport: row.querySelector(".f-transport").value,
     srtp: row.querySelector(".f-srtp").value,
+    presence: row.querySelector(".f-presence").checked,
     enabled: row.querySelector(".f-enabled").checked,
   }));
 }

@@ -564,6 +564,10 @@ class PjsuaEngine(BaseEngine):
             if tid is not None:
                 acc_cfg.sipConfig.transportId = tid
 
+            # Publish SIP presence so clients (e.g. Linphone) show the device as
+            # online. Default on; can be disabled for servers without PUBLISH.
+            acc_cfg.presConfig.publishEnabled = bool(acc.get("presence", True))
+
             # Media encryption (SRTP/SDES).
             srtp = (acc.get("srtp") or "none").lower()
             if srtp == "optional":

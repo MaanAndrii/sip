@@ -20,6 +20,7 @@
         "proxy": "",
         "transport": "udp",
         "srtp": "none",
+        "presence": true,
         "reg_interval": 300
       }
     ],
